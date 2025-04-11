@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import io
 import sqlite3
-from sklearn.datasets import load_iris, fetch_california_housing
+#from sklearn.datasets import load_iris, fetch_california_housing
 import datetime
 import plotly.express as px
 import plotly.graph_objects as go
