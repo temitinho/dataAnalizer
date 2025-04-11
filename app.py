@@ -220,7 +220,8 @@ def load_data_page():
         # Sample data option
         sample_option = st.selectbox(
             "Select sample dataset",
-            ["Iris Flower Dataset", "California Housing", "Diabetes Dataset"]
+            ["Iris Flower Dataset", "California Housing", "Diabetes Dataset", "Boston Housing", "Titanic Passengers"],
+            index=0,
         )
         
         df = load_sample_data(sample_option)
@@ -244,6 +245,18 @@ def load_sample_data(sample_option):
         data = load_boston()
         df = pd.DataFrame(data.data, columns=data.feature_names)
         df['PRICE'] = data.target
+    elif sample_option == "California Housing":
+        data = fetch_california_housing()
+        df = pd.DataFrame(data.data, columns=data.feature_names)
+        df['target'] = data.target 
+    elif sample_option == "Diabetes Dataset":   
+        from sklearn.datasets import load_diabetes
+        data = load_diabetes()
+        df = pd.DataFrame(data.data, columns=data.feature_names)
+        df['target'] = data.target
+    else:
+        st.error("Invalid sample dataset selected.")
+        return None 
     
     # Display data preview
     st.subheader("Data Preview")
