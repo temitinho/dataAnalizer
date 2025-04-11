@@ -9,9 +9,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-
-df = pd.DataFrame()
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame() 
+#df = pd.DataFrame()
 # Set page configuration
 st.set_page_config(
     page_title="Interactive Data Analysis Dashboard",
@@ -515,6 +518,32 @@ def data_manipulation_page(df):
     
     return st.session_state.current_df
 
+def data_analize_page(df):
+    st.header("3. Data Analysis")
+    
+    if df is None:
+        st.warning("Please load data first.")
+        return None
+    
+    # Create tabs for different analysis operations
+    tab1, tab2, tab3 = st.tabs(["Analyze Correlations", "Group By", "Value Counts"])
+    
+    # Tab 1: Analyze Correlations
+    with tab1:
+        df = analyze_correlations_page(df)
+    
+    # Tab 2: Group By
+    with tab2:
+        numeric_columns = df.select_dtypes(include=['number']).columns.tolist()
+        categorical_columns = df.select_dtypes(include=['object', 'category']).columns.tolist()
+        
+        df = analyze_groupby(df, numeric_columns, categorical_columns)
+    
+    # Tab 3: Value Counts
+    with tab3:
+        df = st.session_state['dataframe']
+        value_counts(df)
+    
 def analyze_correlations_page(df):
     st.subheader("Analyze Correlations")
     
@@ -603,7 +632,232 @@ def analyze_correlations_page(df):
                 st.write("No correlations found in the selected columns.")
     
     return df
-
+def analyze_groupby(df, numeric_columns, categorical_columns):
+    st.title("Group by Data Analyzer")
+    
+    if df is None:
+        st.warning("Please load data first.")
+        return None
+    
+    columns = df.columns.tolist()
+    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()        
+    # Allow selecting multiple columns for groupby
+    groupby_cols = st.multiselect(
+        "Select columns to group by:",
+        options=columns,
+        default=None
+    )
+    
+    # Select a numeric column for filtering
+    if numeric_columns:
+        st.subheader("Filter Data")
+        filter_col = st.selectbox(
+            "Select a numeric column to filter:",
+            options=numeric_columns
+        )
+        
+        # Get min and max values for the selected column
+        min_val = float(df[filter_col].min())
+        max_val = float(df[filter_col].max())
+        
+        # Slider for threshold value
+        threshold = st.slider(
+            f"Show values where {filter_col} is greater than:",
+            min_value=min_val,
+            max_value=max_val,
+            value=min_val,
+            step=(max_val - min_val) / 100
+        )
+        
+        # Manual input option
+        use_manual = st.checkbox("Enter threshold manually")
+        if use_manual:
+            manual_threshold = st.number_input(
+                f"Enter threshold value for {filter_col}:",
+                value=float(threshold),
+                min_value=min_val,
+                max_value=max_val
+            )
+            threshold = manual_threshold
+        
+        # Process and display results
+        if st.button("Analyze Data"):
+            if groupby_cols:
+                # Filter data based on threshold
+                filtered_df = df[df[filter_col] > threshold]
+                
+                # Group by selected columns
+                grouped = filtered_df.groupby(groupby_cols).agg({
+                    filter_col: ['count', 'mean', 'sum', 'min', 'max']
+                })
+                
+                st.subheader("Analysis Results")
+                st.write(f"Data grouped by: {', '.join(groupby_cols)}")
+                st.write(f"Showing records where {filter_col} > {threshold}")
+                st.write(f"Number of records after filtering: {len(filtered_df)}")
+                
+                # Display grouped data
+                st.dataframe(grouped)
+                
+                # Provide download option for results
+                csv = grouped.to_csv()
+                st.download_button(
+                    label="Download results as CSV",
+                    data=csv,
+                    file_name="grouped_data_results.csv",
+                    mime="text/csv",
+                )
+                
+                # Show basic visualization
+                st.subheader("Visualization")
+                
+                # Only create chart if not too many groups
+                if len(grouped) <= 20:
+                    chart_data = grouped.reset_index()
+                    st.bar_chart(chart_data, x=groupby_cols[0], y=f"({filter_col}, mean)")
+                else:
+                    st.write("Too many groups to display chart (limited to 20)")
+            else:
+                st.error("Please select at least one column to group by")
+    else:
+        st.warning("No numeric columns found in the dataset for filtering operations")
+def value_counts(df):   
+    st.title("Value Counts Analysis")
+    
+    if df is None:
+        st.warning("Please load data first.")
+        return None
+   
+    # Get column information
+    columns = df.columns.tolist()
+    
+    # Select column for value counts
+    selected_column = st.selectbox(
+        "Select a column to view value counts:",
+        options=columns
+    )
+    
+    # Show value counts
+    if selected_column:
+        st.subheader(f"Value Counts for: {selected_column}")
+        
+        # Determine if the column is numeric
+        is_numeric = pd.api.types.is_numeric_dtype(df[selected_column])
+        
+        # Options for display
+        display_options = st.radio(
+            "Display options:",
+            ["Top values", "All values", "Custom range"],
+            horizontal=True
+        )
+        
+        if display_options == "Top values":
+            top_n = st.slider("Number of top values to show:", 5, 50, 10)
+            limit = top_n
+        elif display_options == "Custom range":
+            start = st.number_input("Start index:", 0, step=1)
+            end = st.number_input("End index:", start+10, step=1)
+            limit = slice(start, end)
+        else:  # All values
+            limit = None
+        
+        # Get value counts
+        if is_numeric and st.checkbox("Bin numeric values", value=False):
+            bins = st.slider("Number of bins:", 5, 100, 10)
+            value_counts = pd.cut(df[selected_column], bins=bins).value_counts()
+            st.write(f"Values binned into {bins} groups")
+        else:
+            # For categorical or unbinned numeric data
+            value_counts = df[selected_column].value_counts()
+        
+        # Apply limits
+        if limit is not None:
+            if isinstance(limit, int):
+                displayed_counts = value_counts.head(limit)
+            else:  # slice
+                displayed_counts = value_counts.iloc[limit]
+        else:
+            displayed_counts = value_counts
+        
+        # Display counts as table
+        st.write(f"**Count of unique values: {len(value_counts)}**")
+        st.dataframe(displayed_counts.reset_index().rename(
+            columns={"index": selected_column, 0: "Count"}
+        ))
+        
+        # Display percentage
+        if st.checkbox("Show percentages", value=True):
+            percentages = value_counts / len(df) * 100
+            if limit is not None:
+                if isinstance(limit, int):
+                    displayed_percentages = percentages.head(limit)
+                else:  # slice
+                    displayed_percentages = percentages.iloc[limit]
+            else:
+                displayed_percentages = percentages
+            
+            st.dataframe(displayed_percentages.reset_index().rename(
+                columns={"index": selected_column, 0: "Percentage (%)"}
+            ).round(2))
+        
+        # Visualization
+        st.subheader("Visualization")
+        chart_type = st.radio(
+            "Chart type:",
+            ["Bar chart", "Pie chart", "Horizontal bar chart"],
+            horizontal=True
+        )
+        
+        # Create figure and axis
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        if chart_type == "Bar chart":
+            displayed_counts.plot(kind='bar', ax=ax)
+        elif chart_type == "Horizontal bar chart":
+            displayed_counts.plot(kind='barh', ax=ax)
+        else:  # Pie chart
+            if len(displayed_counts) > 15:
+                st.warning("Too many categories for a pie chart. Showing top 15.")
+                displayed_counts = displayed_counts.head(15)
+            displayed_counts.plot(kind='pie', ax=ax, autopct='%1.1f%%')
+        
+        plt.title(f"Value Counts for {selected_column}")
+        plt.tight_layout()
+        st.pyplot(fig)
+        
+        # Download option
+        csv = displayed_counts.reset_index().to_csv(index=False)
+        st.download_button(
+            label="Download value counts as CSV",
+            data=csv,
+            file_name=f"{selected_column}_value_counts.csv",
+            mime="text/csv",
+        )
+        
+    # Multi-column comparison
+    st.subheader("Compare Multiple Columns")
+    if st.checkbox("Show value counts for multiple columns"):
+        multi_columns = st.multiselect(
+            "Select columns to compare:",
+            options=columns,
+            default=[]
+        )
+        
+        if multi_columns:
+            max_values = st.slider("Max unique values to display per column:", 5, 30, 10)
+            
+            # Create multi-column layout
+            cols = st.columns(len(multi_columns))
+            
+            for i, col_name in enumerate(multi_columns):
+                with cols[i]:
+                    st.write(f"**{col_name}**")
+                    col_counts = df[col_name].value_counts().head(max_values)
+                    st.dataframe(col_counts.reset_index().rename(
+                        columns={"index": col_name, 0: "Count"}
+                    ), height=400)
+    
+            
 def create_line_chart(df, numeric_columns, categorical_columns):
     st.subheader("Line Chart")
     
@@ -2566,7 +2820,7 @@ def create_main_content(page):
     elif page == "Data Visualization":
         data_visualization_page(df)
     elif page == "Analysis":
-        analyze_correlations_page(df)
+        data_analize_page(df)    
     elif page == "About":
         about_page()
 # Main dashboard application
