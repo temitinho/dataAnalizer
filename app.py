@@ -278,10 +278,197 @@ def load_sample_data(sample_option):
     
     return df
 
-
+def columns_operations(df): 
+    st.title("Column Operations")
+    
+    st.write("### Preview of data")
+    st.dataframe(df.head())
+    
+    # Get numeric columns - update this dynamically to include newly added columns
+    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    
+    if len(numeric_columns) < 2:
+        st.error("The file must contain at least 2 numeric columns for operations.")
+        return
+    
+    # Add operation
+    st.write("### Add columns")
+    add_cols = st.multiselect("Select columns to add", numeric_columns, max_selections=None)
+    add_result_name = st.text_input("Name for addition result column", "sum_result")
+    
+    if add_cols and len(add_cols) >= 2 and st.button("Add Columns"):
+        df[add_result_name] = df[add_cols].sum(axis=1)
+        st.session_state.df = df  # Update the stored dataframe
+        st.success(f"Created new column '{add_result_name}' by adding {len(add_cols)} columns")
+        
+        # Get updated numeric columns after adding the new column
+        numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+        st.dataframe(df.head())
+    
+    # Subtraction operation
+    st.write("### Subtract columns")
+    # Get the latest numeric columns
+    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    minuend = st.selectbox("Select column to subtract from (minuend)", numeric_columns)
+    subtrahend = st.selectbox("Select column to subtract (subtrahend)", 
+                            [col for col in numeric_columns if col != minuend] if len(numeric_columns) > 1 else numeric_columns)
+    sub_result_name = st.text_input("Name for subtraction result column", "difference_result")
+    
+    if minuend and subtrahend and st.button("Subtract Columns"):
+        df[sub_result_name] = df[minuend] - df[subtrahend]
+        st.session_state.df = df  # Update the stored dataframe
+        st.success(f"Created new column '{sub_result_name}' by subtracting {subtrahend} from {minuend}")
+        st.dataframe(df.head())
+    
+    # Multiply operation
+    st.write("### Multiply columns")
+    # Get updated numeric columns
+    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    mult_cols = st.multiselect("Select columns to multiply", numeric_columns, max_selections=None)
+    mult_result_name = st.text_input("Name for multiplication result column", "product_result")
+    
+    if mult_cols and len(mult_cols) >= 2 and st.button("Multiply Columns"):
+        df[mult_result_name] = df[mult_cols].prod(axis=1)
+        st.session_state.df = df  # Update the stored dataframe
+        st.success(f"Created new column '{mult_result_name}' by multiplying {len(mult_cols)} columns")
+        st.dataframe(df.head())
+    
+    # Division operation
+    st.write("### Divide columns")
+    # Get updated numeric columns
+    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    col1 = st.selectbox("Select numerator column", numeric_columns)
+    col2 = st.selectbox("Select denominator column", 
+                        [col for col in numeric_columns if col != col1] if len(numeric_columns) > 1 else numeric_columns)
+    div_result_name = st.text_input("Name for division result column", "division_result")
+    
+    if col1 and col2 and st.button("Divide Columns"):
+        # Handle division by zero gracefully
+        df[div_result_name] = df[col1] / df[col2].replace(0, np.nan)
+        st.session_state.df = df  # Update the stored dataframe
+        st.success(f"Created new column '{div_result_name}' by dividing {col1} by {col2}")
+        st.dataframe(df.head())
+    
+    # Filter Data
+    st.write("### Filter Data")
+    # Get all columns for filtering
+    all_columns = df.columns.tolist()
+    filter_col = st.selectbox("Select column to filter", all_columns)
+    
+    # Determine filter type based on column data type
+    if filter_col in numeric_columns:
+        st.write(f"Filtering numeric column: {filter_col}")
+        min_val = float(df[filter_col].min())
+        max_val = float(df[filter_col].max())
+        
+        filter_type = st.radio("Filter type", ["Range", "Greater than", "Less than", "Equal to"])
+        
+        if filter_type == "Range":
+            filter_range = st.slider(f"Select range for {filter_col}", 
+                                    min_value=min_val, 
+                                    max_value=max_val,
+                                    value=(min_val, max_val))
+            
+            if st.button("Apply Range Filter"):
+                filtered_df = df[(df[filter_col] >= filter_range[0]) & (df[filter_col] <= filter_range[1])]
+                st.session_state.df = filtered_df
+                st.success(f"Data filtered where {filter_col} is between {filter_range[0]} and {filter_range[1]}")
+                st.write(f"Filtered data: {len(filtered_df)} rows (from {len(df)} rows)")
+                st.dataframe(filtered_df.head(10))
+        
+        elif filter_type == "Greater than":
+            threshold = st.slider(f"Select minimum value for {filter_col}", 
+                                min_value=min_val, 
+                                max_value=max_val,
+                                value=min_val)
+            
+            if st.button("Apply Greater Than Filter"):
+                filtered_df = df[df[filter_col] > threshold]
+                st.session_state.df = filtered_df
+                st.success(f"Data filtered where {filter_col} > {threshold}")
+                st.write(f"Filtered data: {len(filtered_df)} rows (from {len(df)} rows)")
+                st.dataframe(filtered_df.head(10))
+        
+        elif filter_type == "Less than":
+            threshold = st.slider(f"Select maximum value for {filter_col}", 
+                                min_value=min_val, 
+                                max_value=max_val,
+                                value=max_val)
+            
+            if st.button("Apply Less Than Filter"):
+                filtered_df = df[df[filter_col] < threshold]
+                st.session_state.df = filtered_df
+                st.success(f"Data filtered where {filter_col} < {threshold}")
+                st.write(f"Filtered data: {len(filtered_df)} rows (from {len(df)} rows)")
+                st.dataframe(filtered_df.head(10))
+        
+        elif filter_type == "Equal to":
+            # For exact match with numeric values, get unique values
+            unique_values = sorted(df[filter_col].unique().tolist())
+            if len(unique_values) > 20:  # If too many values, use a slider instead
+                selected_value = st.slider(f"Select value for {filter_col}", 
+                                        min_value=min_val, 
+                                        max_value=max_val)
+            else:
+                selected_value = st.selectbox(f"Select value for {filter_col}", unique_values)
+            
+            if st.button("Apply Equal To Filter"):
+                filtered_df = df[df[filter_col] == selected_value]
+                st.session_state.df = filtered_df
+                st.success(f"Data filtered where {filter_col} = {selected_value}")
+                st.write(f"Filtered data: {len(filtered_df)} rows (from {len(df)} rows)")
+                st.dataframe(filtered_df.head(10))
+    
+    else:  # Non-numeric column
+        st.write(f"Filtering categorical column: {filter_col}")
+        unique_values = df[filter_col].unique().tolist()
+        selected_values = st.multiselect(f"Select values to keep from {filter_col}", unique_values)
+        
+        if selected_values and st.button("Apply Category Filter"):
+            filtered_df = df[df[filter_col].isin(selected_values)]
+            st.session_state.df = filtered_df
+            st.success(f"Data filtered where {filter_col} is in {', '.join(str(v) for v in selected_values)}")
+            st.write(f"Filtered data: {len(filtered_df)} rows (from {len(df)} rows)")
+            st.dataframe(filtered_df.head(10))
+    
+    # Reset filters button
+    if st.button("Reset All Filters"):
+        # Restore original data but keep calculated columns
+        original_df = st.session_state.original_df.copy()
+        for col in df.columns:
+            if col not in original_df.columns:
+                original_df[col] = df[col]
+        st.session_state.df = original_df
+        st.success("All filters reset to original data (calculated columns preserved)")
+        st.dataframe(original_df.head())    
+    
+    # Sort Data - at the end
+    st.write("### Sort Data")
+    # Get final updated numeric columns
+    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    sort_col = st.selectbox("Select column to sort by", numeric_columns)
+    sort_order = st.radio("Sort order", ["Ascending", "Descending"])
+    
+    if sort_col and st.button("Sort Data"):
+        ascending = sort_order == "Ascending"
+        df = df.sort_values(by=sort_col, ascending=ascending)
+        st.session_state.df = df  # Update the stored dataframe
+        st.success(f"Data sorted by '{sort_col}' in {sort_order.lower()} order")
+        st.dataframe(df.head(10))
+    
+    # Download the modified CSV
+    st.write("### Download Data")
+    if st.button("Download Modified CSV"):
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="Download CSV",
+            data=csv,
+            file_name="modified_data.csv",
+            mime="text/csv"
+        )
 def delete_columns(df):
     st.subheader("Delete Columns")
-    
+    #df = st.session_state.df 
     if df is not None:
         # Get list of columns
         columns = df.columns.tolist()
@@ -380,21 +567,23 @@ def change_data_types(df):
 def data_manipulation_page(df):
     st.header("2. Data Manipulation")
     
+    st.session_state.df = df
+    
     if df is None:
         st.warning("Please load data first.")
         return None
     
     # Create tabs for different manipulation operations
-    tab1, tab2, tab3 = st.tabs(["Delete Columns", "Change Data Types", "Analyze Correlations"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Delete Columns", "Change Data Types", "Analyze Correlations", "Columns Operations"])
     
-    # Store the current state of the dataframe
-    if "current_df" not in st.session_state:
-        st.session_state.current_df = df.copy()
+    # # Store the current state of the dataframe
+    # if "current_df" not in st.session_state:
+    #     st.session_state.current_df = df.copy()
     
     # Tab 1: Delete Columns
     with tab1:
         # Get list of columns
-        columns = st.session_state.current_df.columns.tolist()
+        columns = st.session_state.df.columns.tolist()
         
         # Let user select columns to delete
         columns_to_delete = st.multiselect(
@@ -406,7 +595,7 @@ def data_manipulation_page(df):
         # Create a button to confirm deletion
         if columns_to_delete and st.button("Delete Selected Columns"):
             # Create a copy of the dataframe with selected columns removed
-            st.session_state.current_df = st.session_state.current_df.drop(columns=columns_to_delete)
+            st.session_state.df = st.session_state.df.drop(columns=columns_to_delete)
             
             # Show success message
             st.success(f"Deleted {len(columns_to_delete)} columns: {', '.join(columns_to_delete)}")
@@ -414,7 +603,7 @@ def data_manipulation_page(df):
     # Tab 2: Change Data Types
     with tab2:
         # Get list of columns
-        columns = st.session_state.current_df.columns.tolist()
+        columns = st.session_state.df.columns.tolist()
         
         # Create columns for layout
         col1, col2 = st.columns(2)
@@ -429,7 +618,7 @@ def data_manipulation_page(df):
         
         with col2:
             # Get current data type
-            current_type = str(st.session_state.current_df[selected_column].dtype)
+            current_type = str(st.session_state.df[selected_column].dtype)
             
             # Let user select a new data type
             new_type = st.selectbox(
@@ -440,38 +629,38 @@ def data_manipulation_page(df):
         
         # Show current values
         st.write(f"Current values (type: {current_type}):")
-        st.write(st.session_state.current_df[selected_column].head())
+        st.write(st.session_state.df[selected_column].head())
         
         # Create a button to confirm data type change
         if st.button("Change Data Type"):
             try:
                 # Apply the data type conversion
                 if new_type == "int64":
-                    st.session_state.current_df[selected_column] = st.session_state.current_df[selected_column].astype(int)
+                    st.session_state.df[selected_column] = st.session_state.current_df[selected_column].astype(int)
                 elif new_type == "float64":
-                    st.session_state.current_df[selected_column] = st.session_state.current_df[selected_column].astype(float)
+                    st.session_state.df[selected_column] = st.session_state.current_df[selected_column].astype(float)
                 elif new_type == "str":
-                    st.session_state.current_df[selected_column] = st.session_state.current_df[selected_column].astype(str)
+                    st.session_state.df[selected_column] = st.session_state.current_df[selected_column].astype(str)
                 elif new_type == "category":
-                    st.session_state.current_df[selected_column] = st.session_state.current_df[selected_column].astype('category')
+                    st.session_state.df[selected_column] = st.session_state.current_df[selected_column].astype('category')
                 elif new_type == "datetime64":
-                    st.session_state.current_df[selected_column] = pd.to_datetime(st.session_state.current_df[selected_column])
+                    st.session_state.df[selected_column] = pd.to_datetime(st.session_state.current_df[selected_column])
                 elif new_type == "bool":
-                    st.session_state.current_df[selected_column] = st.session_state.current_df[selected_column].astype(bool)
+                    st.session_state.df[selected_column] = st.session_state.current_df[selected_column].astype(bool)
                 
                 # Show success message
                 st.success(f"Changed data type of '{selected_column}' from {current_type} to {new_type}")
                 
                 # Show the modified values
                 st.write(f"Modified values (type: {st.session_state.current_df[selected_column].dtype}):")
-                st.write(st.session_state.current_df[selected_column].head())
+                st.write(st.session_state.df[selected_column].head())
             except Exception as e:
                 st.error(f"Error changing data type: {e}")
     
     # Tab 3: Analyze Correlations
     with tab3:
         # Get list of numeric columns
-        numeric_columns = st.session_state.current_df.select_dtypes(include=['number']).columns.tolist()
+        numeric_columns = st.session_state.df.select_dtypes(include=['number']).columns.tolist()
         
         if len(numeric_columns) < 2:
             st.warning("Need at least 2 numeric columns to calculate correlations.")
@@ -488,7 +677,7 @@ def data_manipulation_page(df):
                 st.warning("Please select at least 2 columns for correlation analysis.")
             else:
                 # Calculate correlation matrix
-                correlation_matrix = st.session_state.current_df[selected_columns].corr()
+                correlation_matrix = st.session_state.df[selected_columns].corr()
                 
                 # Display correlation matrix
                 st.subheader("Correlation Matrix")
@@ -506,17 +695,17 @@ def data_manipulation_page(df):
                     title="Correlation Heatmap"
                 )
                 st.plotly_chart(fig, use_container_width=True)
-    
+    with tab4:
+        df = st.session_state['dataframe']
+        columns = df.columns.tolist()
+        columns_operations(df)
+        
+        
     # Display the current state of the dataframe
     st.subheader("Current Dataset")
-    st.dataframe(st.session_state.current_df.head())
-    
-    # Add a button to reset the dataframe
-    if st.button("Reset to Original Data"):
-        st.session_state.current_df = df.copy()
-        st.success("Data reset to original state.")
-    
-    return st.session_state.current_df
+    st.dataframe(st.session_state.df.head())
+   
+    return st.session_state.df
 
 def data_analize_page(df):
     st.header("3. Data Analysis")
@@ -1351,19 +1540,7 @@ def create_scatter_plot(df, numeric_columns, categorical_columns):
         List of categorical column names in the dataframe
     """
     st.subheader("Scatter Plot")
-    
-    x_column = st.selectbox(
-        "X-axis",
-        options=numeric_columns + categorical_columns,
-        key="scatter_x_column"  # Add unique key
-    )
-    
-    y_column = st.selectbox(
-        "Y-axis",
-        options=numeric_columns,
-        key="scatter_y_column"  # Add unique key
-    )
-    
+   
     if len(numeric_columns) < 2:
         st.warning("Need at least 2 numeric columns to create a scatter plot.")
         return
