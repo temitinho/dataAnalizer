@@ -22,7 +22,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 ) 
-
 @st.cache_data
 def cached_data_processing(file_content, file_extension, **kwargs):
     """Cache data processing to avoid reloading the same file multiple times"""
@@ -182,7 +181,7 @@ def process_uploaded_file(uploaded_file):
 def load_data_page():
     st.title("Interactive Data Analysis Dashboard")
     
-    st.header("1. Data Loading")
+    st.header("Data Loading")
     
     data_source = st.radio(
         "Select data source",
@@ -230,8 +229,6 @@ def load_data_page():
         df = load_sample_data(sample_option)
     
     return df
-
-
 def load_sample_data(sample_option):
     if sample_option == "Iris Flower Dataset":
         from sklearn.datasets import load_iris
@@ -565,7 +562,7 @@ def change_data_types(df):
     # If no data type was changed, return the original dataframe
     return df
 def data_manipulation_page(df):
-    st.header("2. Data Manipulation")
+    st.header("Data Manipulation")
     
     st.session_state.df = df
     
@@ -708,14 +705,14 @@ def data_manipulation_page(df):
     return st.session_state.df
 
 def data_analize_page(df):
-    st.header("3. Data Analysis")
+    st.header("Data Analysis")
     
     if df is None:
         st.warning("Please load data first.")
         return None
     
     # Create tabs for different analysis operations
-    tab1, tab2, tab3 = st.tabs(["Analyze Correlations", "Group By", "Value Counts"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Analyze Correlations", "Group By", "Value Counts", "Filter Data"])
     
     # Tab 1: Analyze Correlations
     with tab1:
@@ -731,8 +728,11 @@ def data_analize_page(df):
     # Tab 3: Value Counts
     with tab3:
         df = st.session_state['dataframe']
-        value_counts(df)
-    
+        value_counts(df)  
+    # Tab 3: Value Counts
+    with tab4:
+        df = st.session_state['dataframe']
+        filter_data(df)      
 def analyze_correlations_page(df):
     st.subheader("Analyze Correlations")
     
@@ -1045,7 +1045,125 @@ def value_counts(df):
                     st.dataframe(col_counts.reset_index().rename(
                         columns={"index": col_name, 0: "Count"}
                     ), height=400)
+def filter_data(df):    
+    # Filter Data
+    st.write("### Filter Data")
+    # Get all columns for filtering
+    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()  
+    all_columns = df.columns.tolist()
+    filter_col = st.selectbox("Select column to filter", all_columns)
     
+    # Determine filter type based on column data type
+    if filter_col in numeric_columns:
+        st.write(f"Filtering numeric column: {filter_col}")
+        min_val = float(df[filter_col].min())
+        max_val = float(df[filter_col].max())
+        
+        filter_type = st.radio("Filter type", ["Range", "Greater than", "Less than", "Equal to"])
+        
+        if filter_type == "Range":
+            filter_range = st.slider(f"Select range for {filter_col}", 
+                                    min_value=min_val, 
+                                    max_value=max_val,
+                                    value=(min_val, max_val))
+            
+            if st.button("Apply Range Filter"):
+                filtered_df = df[(df[filter_col] >= filter_range[0]) & (df[filter_col] <= filter_range[1])]
+                st.session_state.df = filtered_df
+                st.success(f"Data filtered where {filter_col} is between {filter_range[0]} and {filter_range[1]}")
+                st.write(f"Filtered data: {len(filtered_df)} rows (from {len(df)} rows)")
+                st.dataframe(filtered_df.head(10))
+        
+        elif filter_type == "Greater than":
+            threshold = st.slider(f"Select minimum value for {filter_col}", 
+                                min_value=min_val, 
+                                max_value=max_val,
+                                value=min_val)
+            
+            if st.button("Apply Greater Than Filter"):
+                filtered_df = df[df[filter_col] > threshold]
+                st.session_state.df = filtered_df
+                st.success(f"Data filtered where {filter_col} > {threshold}")
+                st.write(f"Filtered data: {len(filtered_df)} rows (from {len(df)} rows)")
+                st.dataframe(filtered_df.head(10))
+        
+        elif filter_type == "Less than":
+            threshold = st.slider(f"Select maximum value for {filter_col}", 
+                                min_value=min_val, 
+                                max_value=max_val,
+                                value=max_val)
+            
+            if st.button("Apply Less Than Filter"):
+                filtered_df = df[df[filter_col] < threshold]
+                st.session_state.df = filtered_df
+                st.success(f"Data filtered where {filter_col} < {threshold}")
+                st.write(f"Filtered data: {len(filtered_df)} rows (from {len(df)} rows)")
+                st.dataframe(filtered_df.head(10))
+        
+        elif filter_type == "Equal to":
+            # For exact match with numeric values, get unique values
+            unique_values = sorted(df[filter_col].unique().tolist())
+            if len(unique_values) > 20:  # If too many values, use a slider instead
+                selected_value = st.slider(f"Select value for {filter_col}", 
+                                        min_value=min_val, 
+                                        max_value=max_val)
+            else:
+                selected_value = st.selectbox(f"Select value for {filter_col}", unique_values)
+            
+            if st.button("Apply Equal To Filter"):
+                filtered_df = df[df[filter_col] == selected_value]
+                st.session_state.df = filtered_df
+                st.success(f"Data filtered where {filter_col} = {selected_value}")
+                st.write(f"Filtered data: {len(filtered_df)} rows (from {len(df)} rows)")
+                st.dataframe(filtered_df.head(10))
+    
+    else:  # Non-numeric column
+        st.write(f"Filtering categorical column: {filter_col}")
+        unique_values = df[filter_col].unique().tolist()
+        selected_values = st.multiselect(f"Select values to keep from {filter_col}", unique_values)
+        
+        if selected_values and st.button("Apply Category Filter"):
+            filtered_df = df[df[filter_col].isin(selected_values)]
+            st.session_state.df = filtered_df
+            st.success(f"Data filtered where {filter_col} is in {', '.join(str(v) for v in selected_values)}")
+            st.write(f"Filtered data: {len(filtered_df)} rows (from {len(df)} rows)")
+            st.dataframe(filtered_df.head(10))
+    
+    # Reset filters button
+    if st.button("Reset All Filters"):
+        # Restore original data but keep calculated columns
+        original_df = st.session_state.original_df.copy()
+        for col in df.columns:
+            if col not in original_df.columns:
+                original_df[col] = df[col]
+        st.session_state.df = original_df
+        st.success("All filters reset to original data (calculated columns preserved)")
+        st.dataframe(original_df.head())    
+    
+    # Sort Data - at the end
+    st.write("### Sort Data")
+    # Get final updated numeric columns
+    numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+    sort_col = st.selectbox("Select column to sort by", numeric_columns)
+    sort_order = st.radio("Sort order", ["Ascending", "Descending"])
+    
+    if sort_col and st.button("Sort Data"):
+        ascending = sort_order == "Ascending"
+        df = df.sort_values(by=sort_col, ascending=ascending)
+        st.session_state.df = df  # Update the stored dataframe
+        st.success(f"Data sorted by '{sort_col}' in {sort_order.lower()} order")
+        st.dataframe(df.head(10))
+    
+    # Download the modified CSV
+    st.write("### Download Data")
+    if st.button("Download Modified CSV"):
+        csv = df.to_csv(index=False)
+        st.download_button(
+            label="Download CSV",
+            data=csv,
+            file_name="modified_data.csv",
+            mime="text/csv"
+        )    
             
 def create_line_chart(df, numeric_columns, categorical_columns):
     st.subheader("Line Chart")
