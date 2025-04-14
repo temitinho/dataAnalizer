@@ -275,6 +275,152 @@ def load_sample_data(sample_option):
     
     return df
 
+
+def clean_rows(df):
+    st.subheader("Clean Rows & Handle Missing Values")
+    
+    if df is not None:
+        tab1, tab2 = st.tabs(["Delete Rows", "Handle Missing Values"])
+        
+        with tab1:
+            st.write("Delete rows based on conditions")
+            
+            # Let user select a column for filtering
+            columns = df.columns.tolist()
+            filter_column = st.selectbox(
+                "Select column to filter by",
+                options=columns,
+                help="Select the column you want to use for filtering rows"
+            )
+            
+            if filter_column:
+                # Get unique values for the selected column
+                unique_values = df[filter_column].unique().tolist()
+                
+                # Let user select values to remove
+                values_to_remove = st.multiselect(
+                    f"Select values in '{filter_column}' to remove",
+                    options=unique_values,
+                    help="Select one or more values to remove from the dataset"
+                )
+                
+                # Create a button to confirm row deletion
+                if values_to_remove and st.button("Delete Selected Rows"):
+                    # Filter out rows with selected values
+                    df_modified = df[~df[filter_column].isin(values_to_remove)]
+                    
+                    # Show success message
+                    rows_removed = len(df) - len(df_modified)
+                    st.success(f"Removed {rows_removed} rows where '{filter_column}' had values: {', '.join(str(val) for val in values_to_remove)}")
+                    
+                    # Display the modified dataframe
+                    st.subheader("Modified Dataset")
+                    st.dataframe(df_modified.head())
+                    
+                    # Return the modified dataframe
+                    return df_modified
+        
+        with tab2:
+            st.write("Handle missing values (NaN, None)")
+            
+            # Display count of missing values per column
+            missing_counts = df.isna().sum()
+            columns_with_missing = missing_counts[missing_counts > 0].index.tolist()
+            
+            if len(columns_with_missing) > 0:
+                st.write("Columns with missing values:")
+                missing_df = pd.DataFrame({
+                    'Column': missing_counts.index,
+                    'Missing Values': missing_counts.values
+                })
+                missing_df = missing_df[missing_df['Missing Values'] > 0].sort_values(
+                    by='Missing Values', ascending=False
+                )
+                st.dataframe(missing_df)
+                
+                # Let user select columns to clean
+                columns_to_clean = st.multiselect(
+                    "Select columns to handle missing values",
+                    options=columns_with_missing,
+                    default=columns_with_missing,
+                    help="Select columns where you want to handle missing values"
+                )
+                
+                if columns_to_clean:
+                    # Let user select cleaning method
+                    cleaning_method = st.radio(
+                        "Select method to handle missing values",
+                        options=[
+                            "Drop rows with any missing values", 
+                            "Fill missing values with mean (numeric columns only)",
+                            "Fill missing values with median (numeric columns only)",
+                            "Fill missing values with mode (most frequent value)",
+                            "Fill missing values with a specific value"
+                        ]
+                    )
+                    
+                    # For custom fill value
+                    fill_value = None
+                    if cleaning_method == "Fill missing values with a specific value":
+                        fill_value = st.text_input("Enter value to fill missing data:", "0")
+                    
+                    # Create a button to apply cleaning
+                    if st.button("Apply Cleaning"):
+                        df_modified = df.copy()
+                        
+                        if cleaning_method == "Drop rows with any missing values":
+                            df_modified = df_modified.dropna(subset=columns_to_clean)
+                            rows_removed = len(df) - len(df_modified)
+                            st.success(f"Removed {rows_removed} rows with missing values in selected columns")
+                        
+                        elif cleaning_method == "Fill missing values with mean (numeric columns only)":
+                            for col in columns_to_clean:
+                                if pd.api.types.is_numeric_dtype(df_modified[col]):
+                                    mean_val = df_modified[col].mean()
+                                    df_modified[col] = df_modified[col].fillna(mean_val)
+                                    st.info(f"Filled missing values in '{col}' with mean: {mean_val:.2f}")
+                                else:
+                                    st.warning(f"Column '{col}' is not numeric - skipped")
+                        
+                        elif cleaning_method == "Fill missing values with median (numeric columns only)":
+                            for col in columns_to_clean:
+                                if pd.api.types.is_numeric_dtype(df_modified[col]):
+                                    median_val = df_modified[col].median()
+                                    df_modified[col] = df_modified[col].fillna(median_val)
+                                    st.info(f"Filled missing values in '{col}' with median: {median_val:.2f}")
+                                else:
+                                    st.warning(f"Column '{col}' is not numeric - skipped")
+                        
+                        elif cleaning_method == "Fill missing values with mode (most frequent value)":
+                            for col in columns_to_clean:
+                                mode_val = df_modified[col].mode()[0]
+                                df_modified[col] = df_modified[col].fillna(mode_val)
+                                st.info(f"Filled missing values in '{col}' with mode: {mode_val}")
+                        
+                        elif cleaning_method == "Fill missing values with a specific value":
+                            for col in columns_to_clean:
+                                # Convert fill value to match column type if possible
+                                typed_fill_value = fill_value
+                                if pd.api.types.is_numeric_dtype(df_modified[col]):
+                                    try:
+                                        typed_fill_value = float(fill_value)
+                                    except ValueError:
+                                        st.warning(f"Couldn't convert '{fill_value}' to number for column '{col}'")
+                                
+                                df_modified[col] = df_modified[col].fillna(typed_fill_value)
+                                st.info(f"Filled missing values in '{col}' with: {typed_fill_value}")
+                        
+                        # Display the modified dataframe
+                        st.subheader("Modified Dataset")
+                        st.dataframe(df_modified.head())
+                        
+                        # Return the modified dataframe
+                        return df_modified
+            else:
+                st.success("No missing values found in the dataset!")
+    
+    # If no modifications were made, return the original dataframe
+    return df
 def columns_operations(df): 
     st.title("Column Operations")
     
@@ -571,7 +717,7 @@ def data_manipulation_page(df):
         return None
     
     # Create tabs for different manipulation operations
-    tab1, tab2, tab3, tab4 = st.tabs(["Delete Columns", "Change Data Types", "Analyze Correlations", "Columns Operations"])
+    tab1, tab2, tab3, tab4,  tab5 = st.tabs(["Delete Columns", "Change Data Types", "Analyze Correlations", "Columns Operations", "Clean Rows & Handle Missing Values"])
     
     # # Store the current state of the dataframe
     # if "current_df" not in st.session_state:
@@ -696,7 +842,10 @@ def data_manipulation_page(df):
         df = st.session_state['dataframe']
         columns = df.columns.tolist()
         columns_operations(df)
-        
+    with tab5:
+        df = st.session_state['dataframe']
+        columns = df.columns.tolist()
+        clean_rows(df)    
         
     # Display the current state of the dataframe
     st.subheader("Current Dataset")
